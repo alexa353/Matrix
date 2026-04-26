@@ -8,7 +8,6 @@
 #include "esp_log.h"
 #include "esp_psram.h"
 
-// AxeOS 2.13.x Komponenten - Achte auf die exakten Dateinamen
 #include "asic.h"
 #include "asic_result_task.h"
 #include "stratum_task.h"
@@ -30,7 +29,6 @@ static const char * TAG = "bitaxe_matrix";
 
 #define MATRIX_UNITS 16
 
-// Matrix-Worker: Sucht im Einzel-Segment
 void matrix_mining_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / MATRIX_UNITS;
@@ -39,7 +37,6 @@ void matrix_mining_worker(void *pvParameters) {
 
     while (1) {
         if (GLOBAL_STATE.ASIC_MODULE.is_initialized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-            // Setzt den Suchbereich im Chip für diese Matrix-Einheit
             asic_set_nonce_range(my_start, my_end);
         }
         vTaskDelay(pdMS_TO_TICKS(10000));
@@ -50,7 +47,6 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "Bitaxe Matrix Edition - Start");
 
-    // Grund-Initialisierung
     i2c_bitaxe_init();
     nvs_config_init();
     ADC_init();
@@ -58,21 +54,18 @@ void app_main(void)
     SYSTEM_init_system(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
 
-    // Hardware-Tasks mit korrekter Großschreibung für v2.13.x
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
     while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    // ASIC initialisieren
-    asic_initialize(&GLOBAL_STATE, ASIC_INIT_COLD_BOOT, 0);
+    // KORREKTUR: Wir nutzen 0 für den Standard-Initialisierungsmodus
+    asic_initialize(&GLOBAL_STATE, 0, 0);
 
-    // Stratum & Mining Tasks (Bündelung der Shares)
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
     xTaskCreate(ASIC_result_task, "res_coll", 8192, (void *)&GLOBAL_STATE, 15, NULL);
 
-    // Start der 16 Matrix-Worker (Parallel auf beiden Kernen)
     for (int i = 0; i < MATRIX_UNITS; i++) {
         char tname[16];
         snprintf(tname, sizeof(tname), "Matx_%d", i);
@@ -80,5 +73,5 @@ void app_main(void)
     }
 
     start_rest_server((void *)&GLOBAL_STATE);
-    ESP_LOGI(TAG, "Matrix-System online. 16 Einheiten bündeln Shares.");
+    ESP_LOGI(TAG, "Matrix-System online.");
 }
