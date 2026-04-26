@@ -35,7 +35,7 @@ static const char * TAG = "MATRIX_16_1";
 // LINKER-BRÜCKE: Verknüpft alte Funktionsnamen mit neuen Treibern
 // ====================================================================
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
-    BM1370_set_nonce_range(min, max);
+    bm1370_set_nonce_range(min, max);
 }
 
 uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
