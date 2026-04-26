@@ -9,7 +9,6 @@ idf_component_register(
         "input.c"
         "system.c"
         "work_queue.c"
-        "nvs_device.c"
         "lv_font_portfolio-6x8.c"
         "logo.c"
         "./http_server/http_server.c"
@@ -38,6 +37,6 @@ idf_component_register(
         "esp_lcd"
 )
 
-# FIX: Keine Leerzeichen nach dem '=' und korrekte Anführungszeichen für den Pfad
+# KORREKTUR: Pfad ohne Leerzeichen und mit Backslash-Anführungszeichen
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
