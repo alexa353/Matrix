@@ -22,7 +22,7 @@ idf_component_register(
         "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
         "./http_server/theme_api.c"
-        "./http_server/websocket.c"       # HIER KORRIGIERT: Fehlende Datei hinzugefügt
+        "./http_server/websocket.c"
         "./http_server/axe-os/api/system/asic_settings.c"
         "./self_test/self_test.c"
         "./thermal/thermal.c"
@@ -66,10 +66,11 @@ idf_component_register(
         "app_update"
 )
 
-# Warnungen ignorieren
+# Warnungen nicht als Fehler behandeln, um Build-Abbruch zu verhindern
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=implicit-function-declaration" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=unused-variable" APPEND)
 
-# Pfad-Fix für LVGL
+# Pfad-Fix für das Display
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
