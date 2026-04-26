@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "adc.c"
+        "device_config.c"           # HIER KORRIGIERT
         "i2c_bitaxe.c"
         "main.c"
         "nvs_config.c"
@@ -18,6 +19,7 @@ idf_component_register(
         "./thermal/PID.c"
         "./power/power.c"
         "./power/vcore.c"
+        "./power/TPS546.c"          # HIER KORRIGIERT
     INCLUDE_DIRS
         "."
         "tasks"
@@ -34,8 +36,8 @@ idf_component_register(
         "esp_netif"
         "esp_event"
         "dns_server"
-        "esp_psram"  # HIER KORRIGIERT: PSRAM Unterstützung hinzugefügt
-        "esp_lcd"    # Für das Display-Modul
+        "esp_psram"
+        "esp_lcd"
     PRIV_REQUIRES
         "driver"
         "esp_adc"
