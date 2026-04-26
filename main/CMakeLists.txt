@@ -12,7 +12,7 @@ idf_component_register(
         "work_queue.c"
         "lv_font_portfolio-6x8.c"
         "logo.c"
-        "./power/asic_reset.c"        # HIER KORRIGIERT
+        "./power/asic_reset.c"
         "./tasks/asic_result_task.c"
         "./tasks/stratum_task.c"
         "./tasks/create_jobs_task.c"
@@ -64,7 +64,9 @@ idf_component_register(
 )
 
 # GLOBALE FIXES FÜR DEN LINKER
+# Wir biegen alle verwaisten Funktionsnamen auf die universellen AxeOS-Funktionen um
 idf_build_set_property(COMPILE_OPTIONS "-Dasic_initialize(gs,mode,val)=ASIC_init(gs)" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-DBM1370_set_nonce_range(min,max)=asic_set_nonce_range(min,max)" APPEND)
 
 # Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
