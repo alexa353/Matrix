@@ -9,18 +9,12 @@
 #include "asic.h"
 #include "bm1370.h"
 #include "system.h"
-#include "display.h"
-#include "http_server.h"
 
-// Diese Variablen werden von AxeOS global verwaltet
+// Wir nutzen die Variable, die AxeOS in system.c bereitstellt
 extern GlobalState GLOBAL_STATE;
 
-// Linker-Brücken für veraltete Aufrufe in den Tasks
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
     bm1370_set_nonce_range(min, max);
-}
-uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
-    return ASIC_init(gs);
 }
 
 void matrix_worker(void *pvParameters) {
@@ -30,6 +24,7 @@ void matrix_worker(void *pvParameters) {
     uint32_t end = (id == 15) ? 0xFFFFFFFF : (start + step - 1);
 
     while (1) {
+        // Prüfe das Initialisierungs-Flag (AxeOS v2.13 Schreibweise)
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
             asic_set_nonce_range(start, end);
             vTaskDelay(pdMS_TO_TICKS(550)); 
@@ -40,21 +35,20 @@ void matrix_worker(void *pvParameters) {
 }
 
 void app_main(void) {
-    // 1. Minimales System-Init (Den Rest machen die SRCS Dateien)
+    // 1. NVS Init
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
 
-    // 2. Start der 16 Matrix-Worker (Bevor der Webserver alles belegt)
+    // 2. Start der 16 Matrix-Einheiten
     for (int i = 0; i < 16; i++) {
         xTaskCreatePinnedToCore(matrix_worker, "Matrix", 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
-    // 3. Übergabe an das AxeOS System (Initialisiert Display, Wifi, ASIC)
-    // Wir rufen hier NICHT alles einzeln auf, da die SRCS das tun.
+    // 3. Start des AxeOS Hauptsystems
     SYSTEM_init_system(&GLOBAL_STATE);
     
-    ESP_LOGI("MATRIX", "Matrix-Einheiten gestartet. System wird initialisiert...");
+    ESP_LOGI("MATRIX", "16 Einheiten aktiv. System startet...");
 }
