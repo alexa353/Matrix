@@ -41,22 +41,24 @@ void matrix_worker(void *pvParameters) {
     uint32_t my_start = id * step;
     uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
 
-    ESP_LOGI("MATRIX", "Einheit %d bereit für Bereich 0x%08" PRIx32, id, my_start);
-
     while (1) {
-        // Nutze das Flag ASIC_initalized (Schreibweise aus deiner global_state.h)
+        // Nutze das Flag ASIC_initalized aus deinem Header
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
             
-            // 1. Der Chip scannt jetzt exklusiv für dieses Matrix-Segment
-            asic_set_nonce_range(my_start, my_end);
+            // DIREKTER ZUGRIFF: Wir setzen die Range direkt im Job-Speicher.
+            // Das ist der sicherste Weg in AxeOS 2.13.x
+            if (GLOBAL_STATE.ASIC_TASK_MODULE.current_job != NULL) {
+                GLOBAL_STATE.ASIC_TASK_MODULE.current_job->nonce_range_min = my_start;
+                GLOBAL_STATE.ASIC_TASK_MODULE.current_job->nonce_range_max = my_end;
+            }
             
-            // 2. Zeitfenster für diese Einheit (schneller Wechsel für 16+1 Shares)
             vTaskDelay(pdMS_TO_TICKS(100)); 
         } else {
-            vTaskDelay(pdMS_TO_TICKS(1000)); // Warten auf Initialisierung
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 }
+
 
 void app_main(void) {
     ESP_LOGI(TAG, "Bitaxe Matrix Edition (16+1) startet...");
