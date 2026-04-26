@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_psram.h"
 
+// AxeOS v2.13.x Komponenten
 #include "asic.h"
 #include "bm1370.h"
 #include "nvs_config.h"
@@ -25,22 +26,25 @@
 #include "http_server.h"
 #include "statistics_task.h"
 #include "hashrate_monitor_task.h"
+#include "asic_reset.h"
 
 static GlobalState GLOBAL_STATE;
 static const char * TAG = "MATRIX_16_1";
 
 // ====================================================================
-// LINKER-BRÜCKE: Diese Funktionen fangen die "undefined reference" ab
+// LINKER-BRÜCKE: Verknüpft alte Funktionsnamen mit neuen Treibern
 // ====================================================================
-
-// Leitet den Aufruf asic_set_nonce_range an den BM1370 Treiber weiter
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
     BM1370_set_nonce_range(min, max);
 }
 
-// Leitet asic_initialize an ASIC_init weiter (behebt power_management Fehler)
 uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
     return ASIC_init(gs);
+}
+
+// Falls der Linker asic_hold_reset_low sucht:
+esp_err_t asic_hold_reset_low_bridge(void) {
+    return asic_hold_reset_low();
 }
 // ====================================================================
 
@@ -53,6 +57,7 @@ void matrix_worker(void *pvParameters) {
     ESP_LOGI("MATRIX", "Einheit %d bereit für Bereich 0x%08" PRIx32, id, my_start);
 
     while (1) {
+        // Hinweis: In deiner global_state.h steht 'ASIC_initalized' (ohne 'i')
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
             asic_set_nonce_range(my_start, my_end);
             vTaskDelay(pdMS_TO_TICKS(550)); 
