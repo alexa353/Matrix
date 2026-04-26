@@ -6,8 +6,6 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
-
-// AxeOS v2.13.x Komponenten
 #include "asic.h"
 #include "bm1370.h"
 #include "nvs_config.h"
@@ -26,9 +24,8 @@
 #include "hashrate_monitor_task.h"
 
 static GlobalState GLOBAL_STATE;
-static const char * TAG = "MATRIX_FIX";
+static const char * TAG = "MATRIX_OS";
 
-// Linker-Brücken
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
     bm1370_set_nonce_range(min, max);
 }
@@ -42,9 +39,7 @@ void matrix_worker(void *pvParameters) {
     uint32_t step = 0xFFFFFFFF / 16;
     uint32_t start = id * step;
     uint32_t end = (id == 15) ? 0xFFFFFFFF : (start + step - 1);
-
     while (1) {
-        // WICHTIG: Schreibweise 'initalized' ohne 'i' prüfen!
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
             asic_set_nonce_range(start, end);
             vTaskDelay(pdMS_TO_TICKS(550)); 
@@ -55,14 +50,12 @@ void matrix_worker(void *pvParameters) {
 }
 
 void app_main(void) {
-    // 1. System Basis
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (ret==ESP_ERR_NVS_NO_FREE_PAGES||ret==ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-
     i2c_bitaxe_init();
     ADC_init();
     nvs_config_init();
@@ -70,22 +63,16 @@ void app_main(void) {
     SYSTEM_init_system(&GLOBAL_STATE);
     display_init(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
-
-    // 2. Hardware Start
     ASIC_init(&GLOBAL_STATE);
-
-    // 3. Standard Tasks
-    xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
-    xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
-    xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
-    xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
-    xTaskCreate(ASIC_result_task, "collector", 8192, (void *)&GLOBAL_STATE, 15, NULL);
-
-    // 4. Matrix Einheiten
-    for (int i = 0; i < 16; i++) {
-        xTaskCreatePinnedToCore(matrix_worker, "Matrix", 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
+    xTaskCreate(POWER_MANAGEMENT_task,"power",4096,&GLOBAL_STATE,10,NULL);
+    xTaskCreate(FAN_CONTROLLER_task,"fan",4096,&GLOBAL_STATE,5,NULL);
+    xTaskCreate(stratum_task,"stratum",8192,&GLOBAL_STATE,5,NULL);
+    xTaskCreate(create_jobs_task,"miner",8192,&GLOBAL_STATE,20,NULL);
+    xTaskCreate(ASIC_result_task,"collector",8192,&GLOBAL_STATE,15,NULL);
+    xTaskCreate(hashrate_monitor_task,"hash_mon",4096,&GLOBAL_STATE,5,NULL);
+    xTaskCreate(statistics_task,"stats",4096,&GLOBAL_STATE,3,NULL);
+    for (int i=0; i<16; i++) {
+        xTaskCreatePinnedToCore(matrix_worker,"Matrix",3072,(void*)(intptr_t)i,2,NULL,i%2);
     }
-
-    start_rest_server((void *)&GLOBAL_STATE);
-    ESP_LOGI(TAG, "Matrix System Online.");
+    start_rest_server((void*)&GLOBAL_STATE);
 }
