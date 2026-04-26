@@ -6,17 +6,24 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
+// Diese Header kommen aus deinen Komponenten
 #include "asic.h"
 #include "bm1370.h"
 #include "system.h"
 
-// Wir nutzen die Variable, die AxeOS in system.c bereitstellt
+// WICHTIG: Keine neue GLOBAL_STATE erstellen, sondern die aus system.c nutzen!
 extern GlobalState GLOBAL_STATE;
 
+// Diese Brücken-Funktionen werden von den Tasks in 'main/tasks' gesucht
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
     bm1370_set_nonce_range(min, max);
 }
 
+uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
+    return ASIC_init(gs);
+}
+
+// Die Matrix-Logik
 void matrix_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / 16;
@@ -24,7 +31,7 @@ void matrix_worker(void *pvParameters) {
     uint32_t end = (id == 15) ? 0xFFFFFFFF : (start + step - 1);
 
     while (1) {
-        // Prüfe das Initialisierungs-Flag (AxeOS v2.13 Schreibweise)
+        // Nutze das Flag aus der vorhandenen GLOBAL_STATE
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
             asic_set_nonce_range(start, end);
             vTaskDelay(pdMS_TO_TICKS(550)); 
@@ -34,21 +41,21 @@ void matrix_worker(void *pvParameters) {
     }
 }
 
+// Das ist der Einstiegspunkt, den der Compiler sucht
 void app_main(void) {
-    // 1. NVS Init
+    // 1. NVS muss für das System bereit sein
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
 
-    // 2. Start der 16 Matrix-Einheiten
+    // 2. Wir starten NUR unsere Matrix-Tasks
     for (int i = 0; i < 16; i++) {
         xTaskCreatePinnedToCore(matrix_worker, "Matrix", 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
-    // 3. Start des AxeOS Hauptsystems
+    // 3. Wir überlassen AxeOS die restliche Hardware-Initialisierung
+    // Das verhindert den Absturz, weil system.c das Display/WLAN/ASIC schon verwaltet
     SYSTEM_init_system(&GLOBAL_STATE);
-    
-    ESP_LOGI("MATRIX", "16 Einheiten aktiv. System startet...");
 }
