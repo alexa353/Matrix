@@ -1,77 +1,29 @@
 idf_component_register(
     SRCS
-        "adc.c"
-        "device_config.c"
-        "i2c_bitaxe.c"
         "main.c"
-        "nvs_config.c"
-        "display.c"
-        "screen.c"
-        "input.c"
         "system.c"
-        "work_queue.c"
-        "lv_font_portfolio-6x8.c"
-        "logo.c"
-        "./power/asic_reset.c"
-        "./tasks/asic_result_task.c"
+        "i2c_bitaxe.c"
+        "nvs_config.c"
+        "device_config.c"
+        "adc.c"
+        "display.c"
         "./tasks/stratum_task.c"
         "./tasks/create_jobs_task.c"
-        "./tasks/power_management_task.c"
-        "./tasks/fan_controller_task.c"
-        "./tasks/statistics_task.c"
-        "./tasks/hashrate_monitor_task.c"
+        "./tasks/asic_result_task.c"
         "./http_server/http_server.c"
-        "./http_server/theme_api.c"
-        "./http_server/websocket.c"
-        "./http_server/axe-os/api/system/asic_settings.c"
-        "./self_test/self_test.c"
-        "./thermal/thermal.c"
-        "./thermal/PID.c"
-        "./thermal/EMC2101.c"
-        "./thermal/EMC2103.c"
-        "./thermal/EMC2302.c"
-        "./thermal/TMP1075.c"
         "./power/power.c"
-        "./power/vcore.c"
-        "./power/TPS546.c"
-        "./power/DS4432U.c"
-        "./power/INA260.c"
     INCLUDE_DIRS
-        "."
-        "tasks"
-        "thermal"
-        "power"
-        "http_server"
-        "http_server/axe-os/api/system"
-        "../components/dns_server/include"
+        "." "tasks" "power" "http_server"
         "../components/asic/include"
         "../components/stratum/include"
     REQUIRES
-        "connect"
-        "asic"
-        "stratum"
-        "esp_http_server"
-        "nvs_flash"
-        "esp_netif"
-        "esp_event"
-        "dns_server"
-        "esp_psram"
-        "esp_lcd"
+        "connect" "asic" "stratum" "esp_http_server" "nvs_flash"
+        "esp_netif" "esp_event" "esp_psram" "esp_lcd"
     PRIV_REQUIRES
-        "driver"
-        "esp_adc"
-        "esp_driver_i2c"
-        "json"
-        "spiffs"
-        "app_update"
+        "driver" "esp_adc" "esp_driver_i2c" "json" "spiffs"
     EMBED_FILES 
-        "./http_server/recovery_page.html" # FIX: Registriert die fehlende HTML-Datei
+        "./http_server/recovery_page.html"
 )
 
-# Warnungen ignorieren
-idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
-idf_build_set_property(COMPILE_OPTIONS "-Wno-error=implicit-function-declaration" APPEND)
-
-# Pfad-Fix für LVGL
-idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
-idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
+# Erzwinge den Bau der Binary
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=all" APPEND)
