@@ -1,12 +1,10 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <inttypes.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_psram.h"
 #include "nvs_flash.h"
 
 // AxeOS v2.13.x Komponenten
@@ -17,7 +15,6 @@
 #include "connect.h"
 #include "i2c_bitaxe.h"
 #include "adc.h"
-#include "device_config.h"
 #include "display.h"
 #include "power_management_task.h"
 #include "fan_controller_task.h"
@@ -29,9 +26,9 @@
 #include "hashrate_monitor_task.h"
 
 static GlobalState GLOBAL_STATE;
-static const char * TAG = "MATRIX_OS";
+static const char * TAG = "MATRIX_FIX";
 
-// --- LINKER BRÜCKEN ---
+// Linker-Brücken
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
     bm1370_set_nonce_range(min, max);
 }
@@ -40,20 +37,16 @@ uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
     return ASIC_init(gs);
 }
 
-// --- MATRIX WORKER ---
 void matrix_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / 16;
-    uint32_t my_start = id * step;
-    uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
-
-    while(!GLOBAL_STATE.ASIC_initalized) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
+    uint32_t start = id * step;
+    uint32_t end = (id == 15) ? 0xFFFFFFFF : (start + step - 1);
 
     while (1) {
+        // WICHTIG: Schreibweise 'initalized' ohne 'i' prüfen!
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-            asic_set_nonce_range(my_start, my_end);
+            asic_set_nonce_range(start, end);
             vTaskDelay(pdMS_TO_TICKS(550)); 
         } else {
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -62,7 +55,7 @@ void matrix_worker(void *pvParameters) {
 }
 
 void app_main(void) {
-    // 1. NVS Initialisierung
+    // 1. System Basis
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -70,40 +63,29 @@ void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    if (esp_psram_is_initialized()) {
-        GLOBAL_STATE.psram_is_available = true;
-    }
-
-    // 2. Hardware Treiber
     i2c_bitaxe_init();
     ADC_init();
+    nvs_config_init();
     device_config_init(&GLOBAL_STATE);
     SYSTEM_init_system(&GLOBAL_STATE);
     display_init(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
 
-    xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
-    xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
-
-    while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-
+    // 2. Hardware Start
     ASIC_init(&GLOBAL_STATE);
 
+    // 3. Standard Tasks
+    xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
+    xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
     xTaskCreate(ASIC_result_task, "collector", 8192, (void *)&GLOBAL_STATE, 15, NULL);
-    
-    xTaskCreateWithCaps(hashrate_monitor_task, "hash_mon", 4096, (void *)&GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM);
-    xTaskCreateWithCaps(statistics_task, "stats", 4096, (void *)&GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
 
-    // 3. Matrix-Worker Start
+    // 4. Matrix Einheiten
     for (int i = 0; i < 16; i++) {
         xTaskCreatePinnedToCore(matrix_worker, "Matrix", 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
-    // 4. Webserver Start
     start_rest_server((void *)&GLOBAL_STATE);
     ESP_LOGI(TAG, "Matrix System Online.");
 }
