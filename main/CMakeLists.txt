@@ -22,6 +22,7 @@ idf_component_register(
         "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
         "./http_server/theme_api.c"
+        "./http_server/axe-os/api/system/asic_settings.c" # HIER KORRIGIERT
         "./self_test/self_test.c"
         "./thermal/thermal.c"
         "./thermal/PID.c"
@@ -40,6 +41,7 @@ idf_component_register(
         "thermal"
         "power"
         "http_server"
+        "http_server/axe-os/api/system"
         "../components/dns_server/include"
         "../components/asic/include"
         "../components/stratum/include"
@@ -64,9 +66,10 @@ idf_component_register(
 )
 
 # GLOBALE FIXES FÜR DEN LINKER
-# Wir biegen alle verwaisten Funktionsnamen auf die universellen AxeOS-Funktionen um
-idf_build_set_property(COMPILE_OPTIONS "-Dasic_initialize(gs,mode,val)=ASIC_init(gs)" APPEND)
-idf_build_set_property(COMPILE_OPTIONS "-DBM1370_set_nonce_range(min,max)=asic_set_nonce_range(min,max)" APPEND)
+# Wir zwingen den Compiler, die Aliase auf ALLES anzuwenden
+add_compile_definitions(asic_initialize(gs,mode,val)=ASIC_init(gs))
+add_compile_definitions(asic_set_nonce_range(min,max)=BM1370_set_nonce_range(min,max))
+add_compile_definitions(BM1370_set_nonce_range(min,max)=asic_set_nonce_range(min,max))
 
 # Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
