@@ -24,6 +24,7 @@ idf_component_register(
         "thermal"
         "power"
         "http_server"
+        "bap"
     REQUIRES
         "connect"
         "asic"
@@ -42,6 +43,6 @@ idf_component_register(
         "app_update"
 )
 
-# Pfad-Fix für LVGL (Display-Konfiguration)
+# Fix für den Display-Konfigurationspfad
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
