@@ -12,6 +12,7 @@ idf_component_register(
         "work_queue.c"
         "lv_font_portfolio-6x8.c"
         "logo.c"
+        "asic_reset.c"              # HIER KORRIGIERT: Fehlende Datei hinzugefügt
         "./tasks/asic_result_task.c"
         "./tasks/stratum_task.c"
         "./tasks/create_jobs_task.c"
@@ -63,9 +64,8 @@ idf_component_register(
 )
 
 # GLOBALE FIXES FÜR DEN LINKER
-# Wir biegen veraltete Funktionsnamen systemweit auf die neuen Namen um
+# Nur noch der Alias für asic_initialize bleibt
 idf_build_set_property(COMPILE_OPTIONS "-Dasic_initialize(gs,mode,val)=ASIC_init(gs)" APPEND)
-idf_build_set_property(COMPILE_OPTIONS "-Dasic_hold_reset_low()=ASIC_hold_reset_low()" APPEND)
 
 # Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
