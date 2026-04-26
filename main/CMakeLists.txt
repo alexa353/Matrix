@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS
         "adc.c"
-        "device_config.c"           # HIER KORRIGIERT
+        "device_config.c"
         "i2c_bitaxe.c"
         "main.c"
         "nvs_config.c"
@@ -12,6 +12,12 @@ idf_component_register(
         "work_queue.c"
         "lv_font_portfolio-6x8.c"
         "logo.c"
+        "./tasks/asic_result_task.c"
+        "./tasks/stratum_task.c"
+        "./tasks/create_jobs_task.c"
+        "./tasks/fan_controller_task.h" # Falls als .c vorhanden, sonst im Include
+        "./tasks/statistics_task.c"
+        "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
         "./http_server/theme_api.c"
         "./self_test/self_test.c"
@@ -19,7 +25,7 @@ idf_component_register(
         "./thermal/PID.c"
         "./power/power.c"
         "./power/vcore.c"
-        "./power/TPS546.c"          # HIER KORRIGIERT
+        "./power/TPS546.c"
     INCLUDE_DIRS
         "."
         "tasks"
@@ -27,6 +33,8 @@ idf_component_register(
         "power"
         "http_server"
         "../components/dns_server/include"
+        "../components/asic/include"
+        "../components/stratum/include"
     REQUIRES
         "connect"
         "asic"
@@ -47,6 +55,6 @@ idf_component_register(
         "app_update"
 )
 
-# Pfad-Fix für LVGL
+# Pfad-Fix für LVGL (Display-Konfiguration) ohne Leerzeichen
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
