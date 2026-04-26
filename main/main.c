@@ -7,7 +7,9 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_psram.h"
+#include "nvs_flash.h"
 
+// AxeOS v2.13.x Komponenten
 #include "asic.h"
 #include "bm1370.h"
 #include "nvs_config.h"
@@ -49,7 +51,6 @@ void matrix_worker(void *pvParameters) {
     uint32_t my_start = id * step;
     uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
 
-    // Warten bis ASIC wirklich bereit ist (Flag-Check)
     while(!GLOBAL_STATE.ASIC_initalized) {
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -67,7 +68,7 @@ void matrix_worker(void *pvParameters) {
 }
 
 void app_main(void) {
-    // 1. Grundsystem (Muss als erstes stehen!)
+    // 1. NVS Initialisierung (WICHTIG für Boot)
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -85,25 +86,21 @@ void app_main(void) {
     device_config_init(&GLOBAL_STATE);
     SYSTEM_init_system(&GLOBAL_STATE);
     
-    // 3. Display (Startet früh für Feedback)
+    // 3. Display Start
     display_init(&GLOBAL_STATE);
-    ESP_LOGI(TAG, "Display gestartet.");
 
-    // 4. Netzwerk
+    // 4. Netzwerk & Schutz
     wifi_init(&GLOBAL_STATE);
-
-    // 5. Sicherheits-Tasks
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
-    // 6. Mining & Webserver (Erst wenn Hardware steht)
+    // 5. ASIC & Mining
     ASIC_init(&GLOBAL_STATE);
-    
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
     xTaskCreate(ASIC_result_task, "collector", 8192, (void *)&GLOBAL_STATE, 15, NULL);
 
-    // 7. Matrix-Worker (Pinned to Core für Stabilität)
+    // 6. Matrix-Worker (FIX: tname ist jetzt ein Array)
     for (int i = 0; i < 16; i++) {
         char tname[16];
         snprintf(tname, sizeof(tname), "Matx_%d", i);
@@ -111,5 +108,4 @@ void app_main(void) {
     }
 
     start_rest_server((void *)&GLOBAL_STATE);
-    ESP_LOGI(TAG, "Matrix System Online.");
 }
