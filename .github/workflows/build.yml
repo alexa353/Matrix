@@ -27,10 +27,10 @@ jobs:
         target: esp32s3
         path: '.'
         command: |
-          # 1. Den Miner bauen
+          # 1. Den Miner und Matrix-Code kompilieren
           idf.py build
-          # 2. Das Web-Image (www.bin) direkt hier bauen, wo IDF_PATH bekannt ist
-          python $IDF_PATH/components/spiffs/spiffsgen.py 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
+          # 2. Das Web-Image (www.bin) erstellen mit Support für lange Dateinamen
+          python $IDF_PATH/components/spiffs/spiffsgen.py 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin --obj-name-len 64
 
     - uses: actions/setup-python@v5
       with:
