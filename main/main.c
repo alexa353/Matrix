@@ -26,28 +26,22 @@
 #include "http_server.h"
 #include "statistics_task.h"
 #include "hashrate_monitor_task.h"
-#include "asic_reset.h"
 
 static GlobalState GLOBAL_STATE;
 static const char * TAG = "MATRIX_16_1";
 
 // ====================================================================
-// LINKER-BRÜCKE: Verknüpft alte Funktionsnamen mit neuen Treibern
+// LINKER-BRÜCKE: Verhindert "undefined reference" Fehler
 // ====================================================================
-void asic_set_nonce_range(uint32_t min, uint32_t max) {
-    bm1370_set_nonce_range(min, max);
-}
-
 uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
     return ASIC_init(gs);
 }
-
-// Falls der Linker asic_hold_reset_low sucht:
-esp_err_t asic_hold_reset_low_bridge(void) {
-    return asic_hold_reset_low();
-}
 // ====================================================================
 
+/**
+ * Matrix-Worker Task
+ * Setzt den Suchbereich direkt im aktuellen Job-Speicher.
+ */
 void matrix_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / 16;
@@ -57,9 +51,15 @@ void matrix_worker(void *pvParameters) {
     ESP_LOGI("MATRIX", "Einheit %d bereit für Bereich 0x%08" PRIx32, id, my_start);
 
     while (1) {
-        // Hinweis: In deiner global_state.h steht 'ASIC_initalized' (ohne 'i')
+        // Nutze das Flag ASIC_initalized (Schreibweise aus deiner global_state.h)
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-            asic_set_nonce_range(my_start, my_end);
+            
+            // Direkter Zugriff auf den aktuellen Job, um Linker-Fehler zu vermeiden
+            if (GLOBAL_STATE.ASIC_TASK_MODULE.current_job != NULL) {
+                GLOBAL_STATE.ASIC_TASK_MODULE.current_job->nonce_range_min = my_start;
+                GLOBAL_STATE.ASIC_TASK_MODULE.current_job->nonce_range_max = my_end;
+            }
+            
             vTaskDelay(pdMS_TO_TICKS(550)); 
         } else {
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -70,27 +70,34 @@ void matrix_worker(void *pvParameters) {
 void app_main(void) {
     ESP_LOGI(TAG, "Bitaxe Matrix Edition (16+1) startet...");
 
+    // 1. PSRAM & I2C Basis
     if (esp_psram_is_initialized()) {
         GLOBAL_STATE.psram_is_available = true;
     }
 
     ESP_ERROR_CHECK(i2c_bitaxe_init());
     ADC_init();
+    
+    // 2. Konfiguration & System
     nvs_config_init();
     device_config_init(&GLOBAL_STATE);
     SYSTEM_init_system(&GLOBAL_STATE);
     display_init(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
 
+    // 3. Hardware-Schutz (Lüfter & Power)
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
+    // Warten auf WiFi Verbindung
     while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
+    // 4. ASIC Initialisierung
     ASIC_init(&GLOBAL_STATE);
 
+    // 5. Mining Infrastruktur (Der 17. Share / Bündelung)
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
     xTaskCreate(ASIC_result_task, "collector", 8192, (void *)&GLOBAL_STATE, 15, NULL);
@@ -98,12 +105,15 @@ void app_main(void) {
     xTaskCreateWithCaps(hashrate_monitor_task, "hash_mon", 4096, (void *)&GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM);
     xTaskCreateWithCaps(statistics_task, "stats", 4096, (void *)&GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
 
+    // 6. Start der 16 Matrix-Worker
     for (int i = 0; i < 16; i++) {
         char tname[16];
         snprintf(tname, sizeof(tname), "Matx_%d", i);
         xTaskCreatePinnedToCore(matrix_worker, tname, 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
+    // 7. Webinterface starten
     start_rest_server((void *)&GLOBAL_STATE);
+    
     ESP_LOGI(TAG, "System stabil. Matrix-Mining (16+1) aktiv.");
 }
