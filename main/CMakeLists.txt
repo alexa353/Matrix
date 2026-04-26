@@ -23,21 +23,25 @@ idf_component_register(
         "tasks"
         "thermal"
         "power"
-        "http_server"  # HIER KORRIGIERT: Pfad zum Header hinzugefügt
+        "http_server"
     REQUIRES
         "connect"
         "asic"
         "stratum"
+        "esp_http_server"
+        "nvs_flash"
+        "esp_netif"
+        "esp_event"
     PRIV_REQUIRES
         "driver"
         "esp_adc"
-        "esp_event"
-        "esp_netif"
-        "nvs_flash"
         "esp_driver_i2c"
         "esp_lcd"
+        "json"
+        "spiffs"
+        "app_update"
 )
 
-# Pfad-Fix für LVGL
+# Pfad-Fix für LVGL (Display-Konfiguration)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
