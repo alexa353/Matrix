@@ -9,7 +9,6 @@
 #include "esp_psram.h"
 #include "nvs_flash.h"
 
-// AxeOS v2.13.x Komponenten
 #include "asic.h"
 #include "bm1370.h"
 #include "nvs_config.h"
@@ -31,9 +30,6 @@
 static GlobalState GLOBAL_STATE;
 static const char * TAG = "MATRIX_OS";
 
-// ====================================================================
-// HARDWARE-LINKER-FIXES
-// ====================================================================
 void asic_set_nonce_range(uint32_t min, uint32_t max) {
     bm1370_set_nonce_range(min, max);
 }
@@ -42,16 +38,12 @@ uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
     return ASIC_init(gs);
 }
 
-// ====================================================================
-// MATRIX LOGIK
-// ====================================================================
 void matrix_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / 16;
     uint32_t my_start = id * step;
     uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
 
-    // Warten bis ASIC wirklich bereit ist
     while(!GLOBAL_STATE.ASIC_initalized) {
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -69,7 +61,6 @@ void matrix_worker(void *pvParameters) {
 }
 
 void app_main(void) {
-    // 1. NVS Initialisierung (WICHTIG für Boot/Display)
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -81,22 +72,22 @@ void app_main(void) {
         GLOBAL_STATE.psram_is_available = true;
     }
 
-    // 2. Hardware Treiber
     i2c_bitaxe_init();
     ADC_init();
     device_config_init(&GLOBAL_STATE);
     SYSTEM_init_system(&GLOBAL_STATE);
-    
-    // 3. Display Start
     display_init(&GLOBAL_STATE);
-
-    // 4. Netzwerk & Schutz
     wifi_init(&GLOBAL_STATE);
+
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
-    // 5. ASIC & Mining Infrastruktur
+    while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
     ASIC_init(&GLOBAL_STATE);
+
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
     xTaskCreate(ASIC_result_task, "collector", 8192, (void *)&GLOBAL_STATE, 15, NULL);
@@ -104,15 +95,12 @@ void app_main(void) {
     xTaskCreateWithCaps(hashrate_monitor_task, "hash_mon", 4096, (void *)&GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM);
     xTaskCreateWithCaps(statistics_task, "stats", 4096, (void *)&GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
 
-    // 6. Start der 16 Matrix-Worker
     for (int i = 0; i < 16; i++) {
-        char tname[16];
+        char tname[16]; // FIX: Array-Groesse hinzugefuegt
         snprintf(tname, sizeof(tname), "Matx_%d", i);
         xTaskCreatePinnedToCore(matrix_worker, tname, 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
-    // 7. Webserver starten
     start_rest_server((void *)&GLOBAL_STATE);
-    
-    ESP_LOGI(TAG, "System stabil. Matrix-Mining (16+1) aktiv.");
+    ESP_LOGI(TAG, "Matrix System Online.");
 }
