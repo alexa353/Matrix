@@ -8,7 +8,9 @@
 #include "esp_log.h"
 #include "esp_psram.h"
 
+// AxeOS v2.13.x Komponenten
 #include "asic.h"
+#include "bm1370.h"
 #include "nvs_config.h"
 #include "system.h"
 #include "connect.h"
@@ -25,12 +27,20 @@
 #include "statistics_task.h"
 #include "hashrate_monitor_task.h"
 
-// DIESE ZEILE IST DER FIX: Wir sagen dem Compiler, dass diese Funktion existiert.
-extern void asic_set_nonce_range(uint32_t min, uint32_t max);
+// FIX für den Linker-Fehler in power_management_task.c (Schritt 1611)
+// Wir biegen den alten Funktionsnamen auf den neuen um, den deine asic.h nutzt.
+#define asic_initialize(gs, mode, val) ASIC_init(gs)
+
+// Deklaration der Hardware-Funktion für den Matrix-Worker
+extern void BM1370_set_nonce_range(uint32_t min, uint32_t max);
 
 static GlobalState GLOBAL_STATE;
 static const char * TAG = "MATRIX_16_1";
 
+/**
+ * Matrix-Worker Task
+ * Wechselt alle 100ms den Nonce-Bereich des ASICs.
+ */
 void matrix_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / 16;
@@ -38,10 +48,10 @@ void matrix_worker(void *pvParameters) {
     uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
 
     while (1) {
+        // Nutze das Flag ASIC_initalized aus deiner global_state.h
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-            // Wir nutzen die extern deklarierte Funktion
-            // Das umgeht den Fehler mit der 'bm_job' Struktur
-            asic_set_nonce_range(my_start, my_end);
+            // Setzt den Hardware-Bereich im Chip
+            BM1370_set_nonce_range(my_start, my_end);
             vTaskDelay(pdMS_TO_TICKS(100)); 
         } else {
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -50,11 +60,13 @@ void matrix_worker(void *pvParameters) {
 }
 
 void app_main(void) {
+    ESP_LOGI(TAG, "Bitaxe Matrix Edition (16+1) startet...");
+
     if (esp_psram_is_initialized()) {
         GLOBAL_STATE.psram_is_available = true;
     }
 
-    i2c_bitaxe_init();
+    ESP_ERROR_CHECK(i2c_bitaxe_init());
     ADC_init();
     nvs_config_init();
     device_config_init(&GLOBAL_STATE);
@@ -62,6 +74,7 @@ void app_main(void) {
     display_init(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
 
+    // Hardware-Schutz (Lüfter & Power)
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
@@ -69,7 +82,8 @@ void app_main(void) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    ASIC_init(&GLOBAL_STATE);
+    // ASIC Initialisierung (nutzt jetzt den Alias zu ASIC_init)
+    asic_initialize(&GLOBAL_STATE, 0, 0);
 
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
@@ -78,6 +92,7 @@ void app_main(void) {
     xTaskCreateWithCaps(hashrate_monitor_task, "hash_mon", 4096, (void *)&GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM);
     xTaskCreateWithCaps(statistics_task, "stats", 4096, (void *)&GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
 
+    // Start der 16 Matrix-Worker (Gleichverteilt auf Core 0 und 1)
     for (int i = 0; i < 16; i++) {
         char tname[16];
         snprintf(tname, sizeof(tname), "Matx_%d", i);
@@ -85,4 +100,5 @@ void app_main(void) {
     }
 
     start_rest_server((void *)&GLOBAL_STATE);
+    ESP_LOGI(TAG, "System stabil. Matrix-Mining (16+1) aktiv.");
 }
