@@ -3,13 +3,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
 
-// Wir greifen auf die AxeOS-Funktionen zu, ohne Header-Konflikte zu riskieren
-extern void SYSTEM_init_system(void *gs);
-extern void bm1370_set_nonce_range(uint32_t min, uint32_t max);
+// Wir binden die Original-Header ein, damit alle Tasks zufrieden sind
+#include "asic.h"
+#include "system.h"
+#include "bm1370.h"
 
-// Wir nutzen einen neutralen Pointer, damit der Compiler nicht über die GlobalState-Struktur stolpert
-void* global_gs_ptr = NULL;
+// WICHTIG: AxeOS definiert GLOBAL_STATE oft in system.c. 
+// Wir greifen hier nur darauf zu, ohne sie neu zu erstellen.
+extern GlobalState GLOBAL_STATE;
 
 void matrix_worker(void *pvParameters) {
     uintptr_t id = (uintptr_t)pvParameters;
@@ -18,23 +21,26 @@ void matrix_worker(void *pvParameters) {
     uint32_t end = (id == 15) ? 0xFFFFFFFF : (start + step - 1);
 
     while (1) {
-        // Direkter Hardware-Befehl an den BM1370
-        bm1370_set_nonce_range(start, end);
+        // AxeOS v2.13.x Check
+        if (GLOBAL_STATE.ASIC_initalized) {
+            bm1370_set_nonce_range(start, end);
+        }
         vTaskDelay(pdMS_TO_TICKS(550)); 
     }
 }
 
 void app_main(void) {
-    ESP_LOGI("MATRIX", "Starte 16 Matrix-Worker...");
+    // 1. Basis-Initialisierung (Muss für AxeOS sein)
+    nvs_flash_init();
 
-    // 1. Matrix-Tasks starten
+    // 2. Start der 16 Matrix-Worker
     for (uintptr_t i = 0; i < 16; i++) {
         xTaskCreate(matrix_worker, "Mx", 3072, (void*)i, 2, NULL);
     }
 
-    // 2. Den Rest von AxeOS laden (Webserver, WLAN, etc.)
-    // Wir übergeben NULL, da AxeOS die GLOBAL_STATE meist intern statisch verwaltet
-    SYSTEM_init_system(global_gs_ptr);
+    // 3. Der offizielle AxeOS System-Start
+    // Da system.c in deinen SRCS steht, wird dies alles verknüpfen
+    SYSTEM_init_system(&GLOBAL_STATE);
     
-    printf("MATRIX: Handover an AxeOS abgeschlossen.\n");
+    ESP_LOGI("MATRIX", "Matrix-OS erfolgreich injiziert.");
 }
