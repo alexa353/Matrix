@@ -24,7 +24,7 @@ idf_component_register(
         "thermal"
         "power"
         "http_server"
-        "../components/dns_server/include"  # HIER KORRIGIERT
+        "../components/dns_server/include"
     REQUIRES
         "connect"
         "asic"
@@ -33,12 +33,13 @@ idf_component_register(
         "nvs_flash"
         "esp_netif"
         "esp_event"
-        "dns_server"  # HIER KORRIGIERT
+        "dns_server"
+        "esp_psram"  # HIER KORRIGIERT: PSRAM Unterstützung hinzugefügt
+        "esp_lcd"    # Für das Display-Modul
     PRIV_REQUIRES
         "driver"
         "esp_adc"
         "esp_driver_i2c"
-        "esp_lcd"
         "json"
         "spiffs"
         "app_update"
