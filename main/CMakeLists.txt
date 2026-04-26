@@ -24,10 +24,13 @@ idf_component_register(
         "./self_test/self_test.c"
         "./thermal/thermal.c"
         "./thermal/PID.c"
+        "./thermal/EMC2101.c"       # Lüfter-Chip Treiber
+        "./thermal/TMP1075.c"       # Temperatur-Sensor Treiber
         "./power/power.c"
         "./power/vcore.c"
         "./power/TPS546.c"
-        "./power/DS4432U.c"           # HIER KORRIGIERT
+        "./power/DS4432U.c"
+        "./power/INA260.c"          # Strom/Spannungssensor Treiber
     INCLUDE_DIRS
         "."
         "tasks"
