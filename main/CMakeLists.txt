@@ -62,11 +62,12 @@ idf_component_register(
         "app_update"
 )
 
-# GLOBALER FIX FÜR DEN LINKER-FEHLER
-# Wir biegen 'asic_initialize' systemweit auf 'ASIC_init' um
+# GLOBALE FIXES FÜR DEN LINKER
+# Wir biegen veraltete Funktionsnamen systemweit auf die neuen Namen um
 idf_build_set_property(COMPILE_OPTIONS "-Dasic_initialize(gs,mode,val)=ASIC_init(gs)" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-Dasic_hold_reset_low()=ASIC_hold_reset_low()" APPEND)
 
-# Warnungen in Display-Dateien ignorieren
+# Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=implicit-function-declaration" APPEND)
 
