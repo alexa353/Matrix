@@ -20,45 +20,33 @@ jobs:
         npm ci
         npm run build
 
-    - name: esp-idf build
+    - name: esp-idf build and create www.bin
       uses: espressif/esp-idf-ci-action@v1
       with:
         esp_idf_version: v5.5.2
         target: esp32s3
-        command: GITHUB_ACTIONS="true" idf.py build
         path: '.'
+        command: |
+          # 1. Den Miner bauen
+          idf.py build
+          # 2. Das Web-Image (www.bin) direkt hier bauen, wo IDF_PATH bekannt ist
+          python $IDF_PATH/components/spiffs/spiffsgen.py 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
 
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        cache: 'pip'
-
+    
     - name: Install esptool
       run: pip install esptool
-
-    - name: Create www.bin image
-      run: |
-        # Nutzt den festen IDF_PATH der Espressif Action
-        # Erstellt www.bin aus dem dist-Ordner (Frontend)
-        python $IDF_PATH/components/spiffs/spiffsgen.py 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
 
     - name: "Create factory/merged image"
       run: "./merge_bin.sh ./esp-miner-merged.bin"
 
-    - name: upload esp-miner-merged.bin
+    - name: upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: esp-miner-factory.bin
-        path: ./esp-miner-merged.bin
-
-    - name: upload esp-miner.bin
-      uses: actions/upload-artifact@v4
-      with:
-        name: esp-miner.bin
-        path: ./build/esp-miner.bin
-
-    - name: upload www.bin
-      uses: actions/upload-artifact@v4
-      with:
-        name: www.bin
-        path: ./build/www.bin
+        name: bitaxe-matrix-firmware
+        path: |
+          ./esp-miner-merged.bin
+          ./build/esp-miner.bin
+          ./build/www.bin
