@@ -25,9 +25,8 @@ idf_component_register(
         "./thermal/thermal.c"
         "./thermal/PID.c"
         "./thermal/EMC2101.c"
-        "./thermal/EMC2103.c"       # HIER KORRIGIERT
-        "./thermal/EMC2301.c"       # HIER KORRIGIERT (manchmal als 2301/2302 gelistet)
-        "./thermal/EMC2302.c"       # HIER KORRIGIERT
+        "./thermal/EMC2103.c"
+        "./thermal/EMC2302.c"       # Nur diese lassen wir drin
         "./thermal/TMP1075.c"
         "./power/power.c"
         "./power/vcore.c"
