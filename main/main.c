@@ -1,174 +1,60 @@
-#include "esp_event.h"
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_log.h"
-#include "esp_psram.h"
+#include "nvs_flash.h"
 
-#include "asic_result_task.h"
-#include "create_jobs_task.h"
-#include "hashrate_monitor_task.h"
-#include "fan_controller_task.h"
-#include "statistics_task.h"
-#include "system.h"
-#include "http_server.h"
-#include "serial.h"
-#include "stratum_task.h"
-#include "i2c_bitaxe.h"
-#include "adc.h"
-#include "nvs_config.h"
-#include "self_test.h"
 #include "asic.h"
-#include "bap/bap.h"
-#include "device_config.h"
-#include "connect.h"
-#include "asic_reset.h"
-#include "asic_init.h"
-#include "task_monitor.h"
-#include "filesystem.h"
-#include "input.h"
-#include "log_buffer.h"
+#include "bm1370.h"
+#include "system.h"
+#include "display.h"
+#include "http_server.h"
 
-static GlobalState GLOBAL_STATE;
+// Diese Variablen werden von AxeOS global verwaltet
+extern GlobalState GLOBAL_STATE;
 
-static const char * TAG = "bitaxe";
+// Linker-Brücken für veraltete Aufrufe in den Tasks
+void asic_set_nonce_range(uint32_t min, uint32_t max) {
+    bm1370_set_nonce_range(min, max);
+}
+uint8_t asic_initialize(GlobalState * gs, uint8_t mode, uint32_t val) {
+    return ASIC_init(gs);
+}
 
-void app_main(void)
-{
-    if (esp_psram_is_initialized()) {
-        GLOBAL_STATE.psram_is_available = true;
-        log_buffer_init();
-    }
+void matrix_worker(void *pvParameters) {
+    int id = (int)(intptr_t)pvParameters;
+    uint32_t step = 0xFFFFFFFF / 16;
+    uint32_t start = id * step;
+    uint32_t end = (id == 15) ? 0xFFFFFFFF : (start + step - 1);
 
-    ESP_LOGI(TAG, "Welcome to the bitaxe - FOSS || GTFO!");
-
-    if (xTaskCreate(cpu_monitor_task, "cpu_monitor", 4096, (void *)&GLOBAL_STATE, 1, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating cpu monitor task");
-    }
-#ifdef CONFIG_ENABLE_TASK_MONITOR
-    if (xTaskCreate(task_monitor_task, "task_monitor", 8192, NULL, 1, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating task monitor task");
-    }
-#endif
-  
-    if (!esp_psram_is_initialized()) {
-        ESP_LOGE(TAG, "No PSRAM available on ESP32 device!");
-    }
-
-    // Init I2C
-    ESP_ERROR_CHECK(i2c_bitaxe_init());
-    ESP_LOGI(TAG, "I2C initialized successfully");
-
-    // Initialize RST pin to low early to minimize ASIC power consumption
-    ESP_ERROR_CHECK(asic_hold_reset_low());
-    ESP_LOGI(TAG, "RST pin initialized to low");
-
-    // wait for I2C to init
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-
-    // Init ADC
-    ADC_init();
-
-    // initialize the ESP32 NVS
-    if (nvs_config_init() != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to init NVS");
-        return;
-    }
-
-    // Ensure SSID is initialized before any screen/self-test uses it.
-    GLOBAL_STATE.SYSTEM_MODULE.ssid = nvs_config_get_string(NVS_CONFIG_WIFI_SSID);
-    if (GLOBAL_STATE.SYSTEM_MODULE.ssid == NULL) {
-        ESP_LOGW(TAG, "No SSID configured in NVS, using empty string");
-        GLOBAL_STATE.SYSTEM_MODULE.ssid = strdup("");
-        if (GLOBAL_STATE.SYSTEM_MODULE.ssid == NULL) {
-            ESP_LOGE(TAG, "Failed to allocate memory for SSID");
-            return;
+    while (1) {
+        if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
+            asic_set_nonce_range(start, end);
+            vTaskDelay(pdMS_TO_TICKS(550)); 
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
+}
 
-    if (device_config_init(&GLOBAL_STATE) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to init device config");
-        return;
+void app_main(void) {
+    // 1. Minimales System-Init (Den Rest machen die SRCS Dateien)
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        nvs_flash_init();
     }
 
-    if (self_test_init(&GLOBAL_STATE) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to init self test");
-        return;
+    // 2. Start der 16 Matrix-Worker (Bevor der Webserver alles belegt)
+    for (int i = 0; i < 16; i++) {
+        xTaskCreatePinnedToCore(matrix_worker, "Matrix", 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
+    // 3. Übergabe an das AxeOS System (Initialisiert Display, Wifi, ASIC)
+    // Wir rufen hier NICHT alles einzeln auf, da die SRCS das tun.
     SYSTEM_init_system(&GLOBAL_STATE);
-    if (scoreboard_init(&GLOBAL_STATE.SYSTEM_MODULE.scoreboard) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to init scoreboard");
-    }
-
-    if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
-        wifi_init(&GLOBAL_STATE);
-    }
-
-    esp_err_t system_init_ret = SYSTEM_init_peripherals(&GLOBAL_STATE);
     
-    if (system_init_ret == ESP_OK) {
-        if (xTaskCreate(POWER_MANAGEMENT_task, "power management", 8192, (void *) &GLOBAL_STATE, 10, NULL) != pdPASS) {
-            ESP_LOGE(TAG, "Error creating power management task");
-        }
-        if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
-            if (xTaskCreate(FAN_CONTROLLER_task, "fan_controller", 8192, (void *) &GLOBAL_STATE, 5, NULL) != pdPASS) {
-                ESP_LOGE(TAG, "Error creating fan controller task");
-            }
-        }
-    } else {
-        ESP_LOGE(TAG, "Critical peripheral initialization failure (%s). Entering degraded mode.", esp_err_to_name(GLOBAL_STATE.SELF_TEST_MODULE.system_init_ret));
-    }
-    
-    if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
-        // start the API for AxeOS
-        start_rest_server((void *) &GLOBAL_STATE);
-    }
-
-    // After mounting SPIFFS
-    SYSTEM_init_versions(&GLOBAL_STATE);
-
-    // Initialize BAP interface
-    esp_err_t bap_ret = BAP_init(&GLOBAL_STATE);
-    if (bap_ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize BAP interface: %d", bap_ret);
-        // Continue anyway, as BAP is not critical for core functionality
-    }
-
-    while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-
-    queue_init(&GLOBAL_STATE.stratum_queue);
-
-    if (system_init_ret == ESP_OK) {
-        if (asic_initialize(&GLOBAL_STATE, ASIC_INIT_COLD_BOOT, 0) == 0) {
-            return;
-        }
-
-        if (xTaskCreate(create_jobs_task, "stratum miner", 8192, (void *) &GLOBAL_STATE, 20, NULL) != pdPASS) {
-            ESP_LOGE(TAG, "Error creating stratum miner task");
-        }
-        if (xTaskCreate(ASIC_result_task, "asic result", 8192, (void *) &GLOBAL_STATE, 15, NULL) != pdPASS) {
-            ESP_LOGE(TAG, "Error creating asic result task");
-        }
-
-        if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
-            if (xTaskCreate(stratum_task, "stratum admin", 8192, (void *) &GLOBAL_STATE, 5, NULL) != pdPASS) {
-                ESP_LOGE(TAG, "Error creating stratum admin task");
-            }
-        }
-
-        if (xTaskCreateWithCaps(hashrate_monitor_task, "hashrate monitor", 8192, (void *) &GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM) !=
-            pdPASS) {
-            ESP_LOGE(TAG, "Error creating hashrate monitor task");
-        }
-        if (xTaskCreateWithCaps(statistics_task, "statistics", 8192, (void *) &GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
-            ESP_LOGE(TAG, "Error creating statistics task");
-        }
-    }
-
-    if (GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
-        GLOBAL_STATE.SELF_TEST_MODULE.system_init_ret = system_init_ret;
-        if (xTaskCreate(self_test_task, "self_test", 8192, (void *) &GLOBAL_STATE, 10, NULL) != pdPASS) {
-            ESP_LOGE(TAG, "Error creating self test task");
-        }
-    }
+    ESP_LOGI("MATRIX", "Matrix-Einheiten gestartet. System wird initialisiert...");
 }
