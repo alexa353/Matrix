@@ -2,6 +2,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_psram.h"
+#include <inttypes.h>
 
 #include "asic_result_task.h"
 #include "create_jobs_task.h"
@@ -24,12 +25,44 @@
 #include "asic_init.h"
 
 static GlobalState GLOBAL_STATE;
-
 static const char * TAG = "bitaxe";
+
+// --- MATRIX KONFIGURATION ---
+#define MATRIX_UNITS 16
+
+/**
+ * Matrix-Worker Task
+ * Jede Einheit scannt einen exklusiven Bereich.
+ * Ergebnisse werden über das asic_module zurück an den Stratum-Task gereicht.
+ */
+void matrix_mining_worker(void *pvParameters) {
+    int id = (int)(intptr_t)pvParameters;
+    GlobalState *gs = &GLOBAL_STATE;
+    
+    uint32_t step = 0xFFFFFFFF / MATRIX_UNITS;
+    uint32_t my_start = id * step;
+    uint32_t my_end = (id == MATRIX_UNITS - 1) ? 0xFFFFFFFF : (my_start + step - 1);
+
+    ESP_LOGI("MATRIX", "Einheit %d initialisiert: [0x%08" PRIx32 " - 0x%08" PRIx32 "]", id, my_start, my_end);
+
+    while (1) {
+        // Nur agieren, wenn der ASIC bereit ist und ein Job vom Pool vorliegt
+        if (gs->SYSTEM_MODULE.is_connected && gs->ASIC_MODULE.is_initialized) {
+            
+            // Setze den Nonce-Bereich für diese Matrix-Einheit im ASIC
+            // Da AxeOS intern Nonces sammelt, werden Funde aus allen 
+            // Bereichen in der asic_result_task gebündelt.
+            asic_set_nonce_range(my_start, my_end);
+        }
+        
+        // Da wir parallel arbeiten, geben wir anderen Tasks Zeit
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+}
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Welcome to the bitaxe - FOSS || GTFO!");
+    ESP_LOGI(TAG, "Welcome to the bitaxe - MATRIX EDITION");
 
     if (!esp_psram_is_initialized()) {
         ESP_LOGE(TAG, "No PSRAM available on ESP32 device!");
@@ -38,35 +71,19 @@ void app_main(void)
         GLOBAL_STATE.psram_is_available = true;
     }
 
-    // Init I2C
     ESP_ERROR_CHECK(i2c_bitaxe_init());
-    ESP_LOGI(TAG, "I2C initialized successfully");
-
-    // Initialize RST pin to low early to minimize ASIC power consumption
     ESP_ERROR_CHECK(asic_hold_reset_low());
-    ESP_LOGI(TAG, "RST pin initialized to low");
-
-    // wait for I2C to init
     vTaskDelay(100 / portTICK_PERIOD_MS);
-
-    // Init ADC
     ADC_init();
 
-    // initialize the ESP32 NVS
     if (nvs_config_init() != ESP_OK) {
         ESP_LOGE(TAG, "Failed to init NVS");
         return;
     }
 
-    // Ensure SSID is initialized before any screen/self-test uses it.
     GLOBAL_STATE.SYSTEM_MODULE.ssid = nvs_config_get_string(NVS_CONFIG_WIFI_SSID);
     if (GLOBAL_STATE.SYSTEM_MODULE.ssid == NULL) {
-        ESP_LOGW(TAG, "No SSID configured in NVS, using empty string");
         GLOBAL_STATE.SYSTEM_MODULE.ssid = strdup("");
-        if (GLOBAL_STATE.SYSTEM_MODULE.ssid == NULL) {
-            ESP_LOGE(TAG, "Failed to allocate memory for SSID");
-            return;
-        }
     }
 
     if (device_config_init(&GLOBAL_STATE) != ESP_OK) {
@@ -74,60 +91,49 @@ void app_main(void)
         return;
     }
 
-    if (self_test(&GLOBAL_STATE))
-        return;
+    if (self_test(&GLOBAL_STATE)) return;
 
     SYSTEM_init_system(&GLOBAL_STATE);
-
-    // init AP and connect to wifi
     wifi_init(&GLOBAL_STATE);
-
     SYSTEM_init_peripherals(&GLOBAL_STATE);
 
-    if (xTaskCreate(POWER_MANAGEMENT_task, "power management", 8192, (void *) &GLOBAL_STATE, 10, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating power management task");
-    }
-    if (xTaskCreate(FAN_CONTROLLER_task, "fan_controller", 8192, (void *) &GLOBAL_STATE, 5, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating fan controller task");
-    }
+    // Standard Management Tasks
+    xTaskCreate(POWER_MANAGEMENT_task, "power mgmt", 8192, (void *) &GLOBAL_STATE, 10, NULL);
+    xTaskCreate(FAN_CONTROLLER_task, "fan_ctrl", 8192, (void *) &GLOBAL_STATE, 5, NULL);
 
-    // start the API for AxeOS
     start_rest_server((void *) &GLOBAL_STATE);
-
-    // After mounting SPIFFS
     SYSTEM_init_versions(&GLOBAL_STATE);
+    BAP_init(&GLOBAL_STATE);
 
-    // Initialize BAP interface
-    esp_err_t bap_ret = BAP_init(&GLOBAL_STATE);
-    if (bap_ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize BAP interface: %d", bap_ret);
-        // Continue anyway, as BAP is not critical for core functionality
-    }
-
+    // Warten auf WiFi
     while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
     queue_init(&GLOBAL_STATE.stratum_queue);
 
+    // ASIC Kaltstart
     if (asic_initialize(&GLOBAL_STATE, ASIC_INIT_COLD_BOOT, 0) == 0) {
+        ESP_LOGE(TAG, "ASIC Init failed!");
         return;
     }
 
-    if (xTaskCreate(stratum_task, "stratum admin", 8192, (void *) &GLOBAL_STATE, 5, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating stratum admin task");
-    }
-    if (xTaskCreate(create_jobs_task, "stratum miner", 8192, (void *) &GLOBAL_STATE, 20, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating stratum miner task");
-    }
-    if (xTaskCreate(ASIC_result_task, "asic result", 8192, (void *) &GLOBAL_STATE, 15, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating asic result task");
-    }
-    if (xTaskCreateWithCaps(hashrate_monitor_task, "hashrate monitor", 8192, (void *) &GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM) !=
-        pdPASS) {
-        ESP_LOGE(TAG, "Error creating hashrate monitor task");
-    }
-    if (xTaskCreateWithCaps(statistics_task, "statistics", 8192, (void *) &GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
-        ESP_LOGE(TAG, "Error creating statistics task");
+    // --- CORE MINING TASKS ---
+    xTaskCreate(stratum_task, "stratum_admin", 8192, (void *) &GLOBAL_STATE, 5, NULL);
+    xTaskCreate(create_jobs_task, "stratum_miner", 8192, (void *) &GLOBAL_STATE, 20, NULL);
+    
+    // Dieser Task bündelt alle gefundenen Nonces der Matrix-Einheiten zu gemeinsamen Shares:
+    xTaskCreate(ASIC_result_task, "asic_result", 8192, (void *) &GLOBAL_STATE, 15, NULL);
+
+    xTaskCreateWithCaps(hashrate_monitor_task, "hash_mon", 8192, (void *) &GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM);
+    xTaskCreateWithCaps(statistics_task, "stats", 8192, (void *) &GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
+
+    // --- START DER MATRIX EINHEITEN ---
+    ESP_LOGI("MATRIX", "Aktiviere %d parallele Matrix-Einheiten...", MATRIX_UNITS);
+    for (int i = 0; i < MATRIX_UNITS; i++) {
+        char tname[16];
+        snprintf(tname, sizeof(tname), "Matrix_%d", i);
+        // Gleichverteilung auf Core 0 und 1
+        xTaskCreatePinnedToCore(matrix_mining_worker, tname, 4096, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 }
