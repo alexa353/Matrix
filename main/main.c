@@ -108,4 +108,5 @@ void app_main(void) {
     }
 
     start_rest_server((void *)&GLOBAL_STATE);
+    ESP_LOGI(TAG, "System stabil. Matrix-Mining (16+1) aktiv.");
 }
