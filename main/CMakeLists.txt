@@ -65,10 +65,8 @@ idf_component_register(
         "app_update"
 )
 
-# KORREKTUR: Aliase OHNE Klammern für die Shell-Kompatibilität
-add_compile_definitions(asic_initialize=ASIC_init)
-add_compile_definitions(asic_set_nonce_range=BM1370_set_nonce_range)
-add_compile_definitions(asic_hold_reset_low=ASIC_hold_reset_low)
+# KORREKTUR: KEINE globalen Aliase mehr, um Konflikte in anderen Tasks zu vermeiden.
+# Die Aliase setzen wir jetzt direkt in der main.c.
 
 # Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
