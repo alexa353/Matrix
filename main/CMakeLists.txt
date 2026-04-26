@@ -64,13 +64,14 @@ idf_component_register(
         "json"
         "spiffs"
         "app_update"
+    EMBED_FILES 
+        "./http_server/recovery_page.html" # FIX: Registriert die fehlende HTML-Datei
 )
 
-# Warnungen nicht als Fehler behandeln, um Build-Abbruch zu verhindern
+# Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=implicit-function-declaration" APPEND)
-idf_build_set_property(COMPILE_OPTIONS "-Wno-error=unused-variable" APPEND)
 
-# Pfad-Fix für das Display
+# Pfad-Fix für LVGL
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
