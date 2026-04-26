@@ -8,15 +8,18 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '22.15.0'
+
     - name: Build web dist
       working-directory: ./main/http_server/axe-os
       run: |
         npm ci
         npm run build
+
     - name: esp-idf build
       uses: espressif/esp-idf-ci-action@v1
       with:
@@ -24,30 +27,40 @@ jobs:
         target: esp32s3
         command: GITHUB_ACTIONS="true" idf.py build
         path: '.'
+
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
         cache: 'pip'
-    - run: pip install esptool
-    
-    # NEU: Erstellt das www.bin Image aus dem dist-Ordner
+
+    - name: Install esptool
+      run: pip install esptool
+
     - name: Create www.bin image
       run: |
-        python -m pip install spiffsgen
-        python /opt/esp/idf/components/spiffs/spiffsgen.py 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
+        # Sucht das spiffsgen Skript im System und erstellt das Image aus dem dist-Ordner
+        SPIFFSGEN_PATH=$(find / -name spiffsgen.py 2>/dev/null | head -n 1)
+        if [ -z "$SPIFFSGEN_PATH" ]; then
+          echo "Error: spiffsgen.py not found"
+          exit 1
+        fi
+        python $SPIFFSGEN_PATH 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
 
     - name: "Create factory/merged image"
       run: "./merge_bin.sh ./esp-miner-merged.bin"
+
     - name: upload esp-miner-merged.bin
       uses: actions/upload-artifact@v4
       with:
         name: esp-miner-factory.bin
         path: ./esp-miner-merged.bin
+
     - name: upload esp-miner.bin
       uses: actions/upload-artifact@v4
       with:
         name: esp-miner.bin
         path: ./build/esp-miner.bin
+
     - name: upload www.bin
       uses: actions/upload-artifact@v4
       with:
