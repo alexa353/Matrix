@@ -45,7 +45,7 @@ void matrix_worker(void *pvParameters) {
     uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
 
     while(!GLOBAL_STATE.ASIC_initalized) {
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(550));
     }
 
     ESP_LOGI("MATRIX", "Einheit %d aktiv (0x%08X - 0x%08X)", id, (unsigned int)my_start, (unsigned int)my_end);
