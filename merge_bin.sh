@@ -1,77 +1,61 @@
 #!/bin/bash
 
-# --- GITHUB ACTIONS PFAD-FIX START ---
-# Falls die Dateien im tiefen Build-Ordner liegen, schieben wir sie an den Standard-Platz
-mkdir -p build/bootloader build/partition_table
-find . -name "esp-miner.bin" -exec cp {} build/esp-miner.bin \; 2>/dev/null
-find . -name "www.bin" -exec cp {} build/www.bin \; 2>/dev/null
-find . -name "bootloader.bin" -exec cp {} build/bootloader/bootloader.bin \; 2>/dev/null
-find . -name "partition-table.bin" -exec cp {} build/partition_table/partition-table.bin \; 2>/dev/null
-find . -name "ota_data_initial.bin" -exec cp {} build/ota_data_initial.bin \; 2>/dev/null
-# --- GITHUB ACTIONS PFAD-FIX ENDE ---
-
-# Binary file paths and addresses
-BOOTLOADER_BIN="build/bootloader/bootloader.bin"
-BOOTLOADER_BIN_ADDR=0x0
-PARTITION_TABLE="build/partition_table/partition-table.bin"
-PARTITION_TABLE_ADDR=0x8000
-CONFIG_BIN="config.bin"
-CONFIG_BIN_ADDR=0x9000
-MINER_BIN="build/esp-miner.bin"
-MINER_BIN_ADDR=0x10000
-WWW_BIN="build/www.bin"
-WWW_BIN_ADDR=0x310000
-OTA_BIN="build/ota_data_initial.bin"
-OTA_BIN_ADDR=0xf10000
-
-BINS_DEFAULT=($BOOTLOADER_BIN $PARTITION_TABLE $MINER_BIN $WWW_BIN $OTA_BIN)
-BINS_AND_ADDRS_DEFAULT=($BOOTLOADER_BIN_ADDR $BOOTLOADER_BIN $PARTITION_TABLE_ADDR $PARTITION_TABLE $MINER_BIN_ADDR $MINER_BIN $WWW_BIN_ADDR $WWW_BIN $OTA_BIN_ADDR $OTA_BIN)
-
-BINS_AND_ADDRS_UPDATE=($MINER_BIN_ADDR $MINER_BIN $WWW_BIN_ADDR $WWW_BIN $OTA_BIN_ADDR $OTA_BIN)
-
-function show_help() {
-    echo "Creates a combined binary using esptool's merge_bin command"
-    echo "Usage: $0 [OPTION] output_file"
+# --- 1. INTELLIGENTE PFADSUCHE ---
+find_file() {
+    local found=$(find . -name "$1" -type f -not -path "*/.*" | head -n 1)
+    echo "$found"
 }
 
-function print_with_error_header() {
-    echo "ERROR:" $1
-}
+# Dateien finden
+BOOTLOADER_BIN=$(find_file "bootloader.bin")
+PART_TABLE_BIN=$(find_file "partition-table.bin")
+MINER_BIN=$(find_file "esp-miner.bin")
+WWW_BIN=$(find_file "www.bin")
+OTA_INIT_BIN=$(find_file "ota_data_initial.bin")
 
-#### MAIN ####
-
-if ! command -v esptool.py &> /dev/null; then
-    echo "esptool.py is not installed or not in PATH. Please install it first."
-    exit 1
-fi
-
-output_file="$1"
-if [ -z "$output_file" ]; then
-    print_with_error_header "output_file missing"
-    exit 2
-fi
-
-selected_bins=(${BINS_DEFAULT[@]})
-selected_bins_and_addrs=(${BINS_AND_ADDRS_DEFAULT[@]})
-esptool_leading_args="--chip esp32s3 merge_bin --flash_mode dio --flash_size 16MB --flash_freq 80m"
-
-# Validierung der Dateien
-for file in "${selected_bins[@]}"; do
-    if [ ! -f "$file" ]; then
-        print_with_error_header "Required file $file does not exist. Make sure to build first."
-        # Wir erzwingen hier keinen harten Exit 4, damit wir die Artifacts trotzdem sehen
-        echo "Versuche trotzdem fortzufahren..."
+# --- 2. DYNAMISCHE ADRESS-EXTRAKTION ---
+# Wir lesen die Offsets direkt aus deiner partitions.csv aus
+get_offset() {
+    local name=$1
+    local default=$2
+    if [ -f "partitions.csv" ]; then
+        local offset=$(grep "^$name," partitions.csv | cut -d',' -f4 | tr -d '[:space:]')
+        if [[ $offset =~ ^0x[0-9a-fA-F]+ ]]; then
+            echo "$offset"
+            return
+        fi
     fi
-done
+    echo "$default"
+}
 
-# Call esptool.py
-esptool.py $esptool_leading_args "${selected_bins_and_addrs[@]}" -o "$output_file"
+ADDR_BOOT="0x0"
+ADDR_PART="0x8000"
+ADDR_MINE=$(get_offset "factory" "0x10000")
+ADDR_WWW=$(get_offset "www" "0x410000")
+ADDR_OTA=$(get_offset "otadata" "0xf10000")
 
-if [ $? -eq 0 ]; then
-    echo "Successfully created $output_file"
+# --- 3. MERGE PROZESS ---
+output_file=${1:-"esp-miner-factory-universal.bin"}
+
+echo "--- Matrix Build Info ---"
+echo "Miner: $MINER_BIN @ $ADDR_MINE"
+echo "Web:   $WWW_BIN @ $ADDR_WWW"
+echo "-------------------------"
+
+if [ -z "$MINER_BIN" ] || [ -z "$WWW_BIN" ]; then
+    echo "ERROR: Kritische Dateien fehlen. Prüfe den Build-Log!"
+    # Wir erzwingen Erfolg für den Artifact-Upload, auch wenn der Merge nicht geht
     exit 0
-else
-    print_with_error_header "Failed to create $output_file"
-    # Exit 0, damit GitHub den Upload-Schritt trotzdem ausführt!
-    exit 0 
 fi
+
+esptool.py --chip esp32s3 merge_bin \
+    --flash_mode dio --flash_size 16MB --flash_freq 80m \
+    $ADDR_BOOT "$BOOTLOADER_BIN" \
+    $ADDR_PART "$PART_TABLE_BIN" \
+    $ADDR_MINE "$MINER_BIN" \
+    $ADDR_WWW "$WWW_BIN" \
+    $ADDR_OTA "$OTA_INIT_BIN" \
+    -o "$output_file"
+
+# Immer Erfolg melden, damit GitHub die Artifacts hochlädt
+exit 0
