@@ -23,6 +23,7 @@ idf_component_register(
         "tasks"
         "thermal"
         "power"
+        "http_server"  # HIER KORRIGIERT: Pfad zum Header hinzugefügt
     REQUIRES
         "connect"
         "asic"
@@ -37,6 +38,6 @@ idf_component_register(
         "esp_lcd"
 )
 
-# KORREKTUR: Pfad ohne Leerzeichen und mit Backslash-Anführungszeichen
+# Pfad-Fix für LVGL
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
