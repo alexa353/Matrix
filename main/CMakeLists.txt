@@ -22,6 +22,7 @@ idf_component_register(
         "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
         "./http_server/theme_api.c"
+        "./http_server/websocket.c"       # HIER KORRIGIERT: Fehlende Datei hinzugefügt
         "./http_server/axe-os/api/system/asic_settings.c"
         "./self_test/self_test.c"
         "./thermal/thermal.c"
@@ -64,9 +65,6 @@ idf_component_register(
         "spiffs"
         "app_update"
 )
-
-# KORREKTUR: KEINE globalen Aliase mehr, um Konflikte in anderen Tasks zu vermeiden.
-# Die Aliase setzen wir jetzt direkt in der main.c.
 
 # Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
