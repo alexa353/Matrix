@@ -25,17 +25,31 @@ idf_component_register(
         "./power/vcore.c"
         "./power/INA260.c"
     INCLUDE_DIRS
-        "." "tasks" "power" "http_server"
+        "." 
+        "tasks" 
+        "power" 
+        "http_server"
         "../components/asic/include"
         "../components/stratum/include"
     REQUIRES
-        "connect" "asic" "stratum" "esp_http_server" "nvs_flash"
-        "esp_netif" "esp_event" "esp_psram" "esp_lcd"
+        "connect" 
+        "asic" 
+        "stratum" 
+        "esp_http_server" 
+        "nvs_flash"
+        "esp_netif" 
+        "esp_event" 
+        "esp_psram" 
+        "esp_lcd"
     PRIV_REQUIRES
-        "driver" "esp_adc" "esp_driver_i2c" "json" "spiffs"
+        "driver" 
+        "esp_adc" 
+        "esp_driver_i2c" 
+        "json" 
+        "spiffs"
     EMBED_FILES 
         "./http_server/recovery_page.html"
 )
 
-# Das verhindert, dass der Build bei Warnungen abbricht
+# WICHTIG: Verhindert den Abbruch bei Warnungen und Linker-Problemen
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=all" APPEND)
