@@ -15,8 +15,8 @@ idf_component_register(
         "./tasks/asic_result_task.c"
         "./tasks/stratum_task.c"
         "./tasks/create_jobs_task.c"
-        "./tasks/power_management_task.c"  # HIER KORRIGIERT
-        "./tasks/fan_controller_task.c"    # HIER KORRIGIERT
+        "./tasks/power_management_task.c"
+        "./tasks/fan_controller_task.c"
         "./tasks/statistics_task.c"
         "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
@@ -27,6 +27,7 @@ idf_component_register(
         "./power/power.c"
         "./power/vcore.c"
         "./power/TPS546.c"
+        "./power/DS4432U.c"           # HIER KORRIGIERT
     INCLUDE_DIRS
         "."
         "tasks"
