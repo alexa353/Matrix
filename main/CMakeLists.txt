@@ -22,7 +22,7 @@ idf_component_register(
         "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
         "./http_server/theme_api.c"
-        "./http_server/axe-os/api/system/asic_settings.c" # HIER KORRIGIERT
+        "./http_server/axe-os/api/system/asic_settings.c"
         "./self_test/self_test.c"
         "./thermal/thermal.c"
         "./thermal/PID.c"
@@ -65,11 +65,10 @@ idf_component_register(
         "app_update"
 )
 
-# GLOBALE FIXES FÜR DEN LINKER
-# Wir zwingen den Compiler, die Aliase auf ALLES anzuwenden
-add_compile_definitions(asic_initialize(gs,mode,val)=ASIC_init(gs))
-add_compile_definitions(asic_set_nonce_range(min,max)=BM1370_set_nonce_range(min,max))
-add_compile_definitions(BM1370_set_nonce_range(min,max)=asic_set_nonce_range(min,max))
+# KORREKTUR: Aliase OHNE Klammern für die Shell-Kompatibilität
+add_compile_definitions(asic_initialize=ASIC_init)
+add_compile_definitions(asic_set_nonce_range=BM1370_set_nonce_range)
+add_compile_definitions(asic_hold_reset_low=ASIC_hold_reset_low)
 
 # Warnungen ignorieren
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format" APPEND)
