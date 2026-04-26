@@ -1,61 +1,40 @@
 #!/bin/bash
 
-# --- 1. INTELLIGENTE PFADSUCHE ---
+# --- 1. RADIKALE SUCHE ---
+echo "--- DEBUG: Starte Dateisuche im gesamten Runner ---"
+find . -name "*.bin" -type f
+echo "--- DEBUG ENDE ---"
+
 find_file() {
-    local found=$(find . -name "$1" -type f -not -path "*/.*" | head -n 1)
-    echo "$found"
+    find . -name "$1" -type f -not -path "*/.*" | head -n 1
 }
 
-# Dateien finden
-BOOTLOADER_BIN=$(find_file "bootloader.bin")
-PART_TABLE_BIN=$(find_file "partition-table.bin")
 MINER_BIN=$(find_file "esp-miner.bin")
 WWW_BIN=$(find_file "www.bin")
-OTA_INIT_BIN=$(find_file "ota_data_initial.bin")
+BOOT_BIN=$(find_file "bootloader.bin")
+PART_BIN=$(find_file "partition-table.bin")
 
-# --- 2. DYNAMISCHE ADRESS-EXTRAKTION ---
-# Wir lesen die Offsets direkt aus deiner partitions.csv aus
-get_offset() {
-    local name=$1
-    local default=$2
-    if [ -f "partitions.csv" ]; then
-        local offset=$(grep "^$name," partitions.csv | cut -d',' -f4 | tr -d '[:space:]')
-        if [[ $offset =~ ^0x[0-9a-fA-F]+ ]]; then
-            echo "$offset"
-            return
-        fi
-    fi
-    echo "$default"
-}
-
-ADDR_BOOT="0x0"
-ADDR_PART="0x8000"
-ADDR_MINE=$(get_offset "factory" "0x10000")
-ADDR_WWW=$(get_offset "www" "0x410000")
-ADDR_OTA=$(get_offset "otadata" "0xf10000")
-
-# --- 3. MERGE PROZESS ---
-output_file=${1:-"esp-miner-factory-universal.bin"}
-
-echo "--- Matrix Build Info ---"
-echo "Miner: $MINER_BIN @ $ADDR_MINE"
-echo "Web:   $WWW_BIN @ $ADDR_WWW"
-echo "-------------------------"
-
-if [ -z "$MINER_BIN" ] || [ -z "$WWW_BIN" ]; then
-    echo "ERROR: Kritische Dateien fehlen. Prüfe den Build-Log!"
-    # Wir erzwingen Erfolg für den Artifact-Upload, auch wenn der Merge nicht geht
-    exit 0
+# --- 2. ADRESSEN AUS DER CSV LESEN ---
+# Falls keine CSV da ist, nutzen wir deine Standardwerte
+ADDR_MINE=0x10000
+ADDR_WWW=0x410000 
+if [ -f "partitions.csv" ]; then
+    ADDR_MINE=$(grep "factory" partitions.csv | cut -d',' -f4 | tr -d '[:space:]')
+    ADDR_WWW=$(grep "www" partitions.csv | cut -d',' -f4 | tr -d '[:space:]')
 fi
 
-esptool.py --chip esp32s3 merge_bin \
-    --flash_mode dio --flash_size 16MB --flash_freq 80m \
-    $ADDR_BOOT "$BOOTLOADER_BIN" \
-    $ADDR_PART "$PART_TABLE_BIN" \
-    $ADDR_MINE "$MINER_BIN" \
-    $ADDR_WWW "$WWW_BIN" \
-    $ADDR_OTA "$OTA_INIT_BIN" \
-    -o "$output_file"
+# --- 3. MERGE ODER DUMMY-ERZEUGUNG ---
+output_file=${1:-"esp-miner-merged.bin"}
 
-# Immer Erfolg melden, damit GitHub die Artifacts hochlädt
+if [ -f "$MINER_BIN" ] && [ -f "$WWW_BIN" ]; then
+    echo "Baue Merged-Firmware aus $MINER_BIN und $WWW_BIN"
+    esptool.py --chip esp32s3 merge_bin --flash_mode dio --flash_size 16MB --flash_freq 80m \
+        0x0 "$BOOT_BIN" 0x8000 "$PART_BIN" $ADDR_MINE "$MINER_BIN" $ADDR_WWW "$WWW_BIN" -o "$output_file"
+else
+    echo "WARNUNG: Miner-Binary fehlt. Prüfe 'esp-idf build' Schritt!"
+    # Wir erstellen eine leere Datei, damit der Artifact-Upload nicht leer ausgeht
+    touch build/FEHLENDE_MINER_DATEI.txt
+fi
+
+# IMMER Erfolg melden, damit wir die Logs und Dateien sehen!
 exit 0
