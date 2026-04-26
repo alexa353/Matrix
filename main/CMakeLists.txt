@@ -7,11 +7,23 @@ idf_component_register(
         "device_config.c"
         "adc.c"
         "display.c"
+        "screen.c"
+        "input.c"
+        "work_queue.c"
+        "./power/asic_reset.c"
+        "./tasks/asic_result_task.c"
         "./tasks/stratum_task.c"
         "./tasks/create_jobs_task.c"
-        "./tasks/asic_result_task.c"
+        "./tasks/power_management_task.c"
+        "./tasks/fan_controller_task.c"
+        "./tasks/statistics_task.c"
+        "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
+        "./http_server/theme_api.c"
+        "./http_server/websocket.c"
         "./power/power.c"
+        "./power/vcore.c"
+        "./power/INA260.c"
     INCLUDE_DIRS
         "." "tasks" "power" "http_server"
         "../components/asic/include"
@@ -25,5 +37,5 @@ idf_component_register(
         "./http_server/recovery_page.html"
 )
 
-# Erzwinge den Bau der Binary
+# Das verhindert, dass der Build bei Warnungen abbricht
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=all" APPEND)
