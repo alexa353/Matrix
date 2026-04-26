@@ -15,7 +15,8 @@ idf_component_register(
         "./tasks/asic_result_task.c"
         "./tasks/stratum_task.c"
         "./tasks/create_jobs_task.c"
-        "./tasks/fan_controller_task.h" # Falls als .c vorhanden, sonst im Include
+        "./tasks/power_management_task.c"  # HIER KORRIGIERT
+        "./tasks/fan_controller_task.c"    # HIER KORRIGIERT
         "./tasks/statistics_task.c"
         "./tasks/hashrate_monitor_task.c"
         "./http_server/http_server.c"
@@ -55,6 +56,5 @@ idf_component_register(
         "app_update"
 )
 
-# Pfad-Fix für LVGL (Display-Konfiguration) ohne Leerzeichen
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
