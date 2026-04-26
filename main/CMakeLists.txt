@@ -24,7 +24,7 @@ idf_component_register(
         "thermal"
         "power"
         "http_server"
-        "bap"
+        "../components/dns_server/include"  # HIER KORRIGIERT
     REQUIRES
         "connect"
         "asic"
@@ -33,6 +33,7 @@ idf_component_register(
         "nvs_flash"
         "esp_netif"
         "esp_event"
+        "dns_server"  # HIER KORRIGIERT
     PRIV_REQUIRES
         "driver"
         "esp_adc"
@@ -43,6 +44,6 @@ idf_component_register(
         "app_update"
 )
 
-# Fix für den Display-Konfigurationspfad
+# Pfad-Fix für LVGL
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH=\"${CMAKE_SOURCE_DIR}/main/lv_conf.h\"" APPEND)
