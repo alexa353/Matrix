@@ -6,8 +6,11 @@
 #include "freertos/task.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_psram.h"
 
+// AxeOS v2.13.x Komponenten
 #include "asic.h"
+#include "bm1370.h"
 #include "nvs_config.h"
 #include "system.h"
 #include "connect.h"
@@ -21,53 +24,87 @@
 #include "create_jobs_task.h"
 #include "asic_result_task.h"
 #include "http_server.h"
+#include "statistics_task.h"
+#include "hashrate_monitor_task.h"
 
 static GlobalState GLOBAL_STATE;
-static const char * TAG = "MATRIX_BITAXE";
+static const char * TAG = "MATRIX_16_1";
 
+/**
+ * Matrix-Worker Task
+ * Wechselt alle 100ms den Nonce-Bereich des ASICs, um 16 Einheiten 
+ * quasi-parallel auf einem Chip rechnen zu lassen.
+ */
 void matrix_worker(void *pvParameters) {
     int id = (int)(intptr_t)pvParameters;
     uint32_t step = 0xFFFFFFFF / 16;
     uint32_t my_start = id * step;
     uint32_t my_end = (id == 15) ? 0xFFFFFFFF : (my_start + step - 1);
 
+    ESP_LOGI("MATRIX", "Einheit %d bereit für Bereich 0x%08" PRIx32, id, my_start);
+
     while (1) {
-        // Nutze das Flag ASIC_initalized (Schreibfehler im Original beachten!)
+        // Nutze das Flag ASIC_initalized (Schreibweise aus deiner global_state.h)
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-            // Wir nutzen die universelle Funktion aus deiner asic.h
-            // oder setzen die Register direkt via ASIC_read_registers Update-Loop
-            ASIC_read_registers(&GLOBAL_STATE);
+            
+            // 1. Der Chip scannt jetzt exklusiv für dieses Matrix-Segment
+            BM1370_set_nonce_range(my_start, my_end);
+            
+            // 2. Zeitfenster für diese Einheit (schneller Wechsel für 16+1 Shares)
+            vTaskDelay(pdMS_TO_TICKS(100)); 
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(1000)); // Warten auf Initialisierung
         }
-        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
 void app_main(void) {
-    i2c_bitaxe_init();
-    nvs_config_init();
+    ESP_LOGI(TAG, "Bitaxe Matrix Edition (16+1) startet...");
+
+    // 1. PSRAM & I2C Basis
+    if (esp_psram_is_initialized()) {
+        GLOBAL_STATE.psram_is_available = true;
+    }
+
+    ESP_ERROR_CHECK(i2c_bitaxe_init());
     ADC_init();
+    
+    // 2. Konfiguration & System
+    nvs_config_init();
     device_config_init(&GLOBAL_STATE);
     SYSTEM_init_system(&GLOBAL_STATE);
     display_init(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
 
+    // 3. Hardware-Schutz (Lüfter & Power)
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
-    while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) vTaskDelay(100 / portTICK_PERIOD_MS);
+    // Warten auf WiFi Verbindung
+    while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 
-    // Initialisierung laut deiner asic.h
+    // 4. ASIC Initialisierung (laut deiner asic.h)
     ASIC_init(&GLOBAL_STATE);
 
+    // 5. Mining Infrastruktur (Der 17. Share / Bündelung)
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
-    xTaskCreate(ASIC_result_task, "result", 8192, (void *)&GLOBAL_STATE, 15, NULL);
+    xTaskCreate(ASIC_result_task, "collector", 8192, (void *)&GLOBAL_STATE, 15, NULL);
+    
+    xTaskCreateWithCaps(hashrate_monitor_task, "hash_mon", 4096, (void *)&GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM);
+    xTaskCreateWithCaps(statistics_task, "stats", 4096, (void *)&GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
 
+    // 6. Start der 16 Matrix-Worker (Gleichverteilt auf Core 0 und 1)
     for (int i = 0; i < 16; i++) {
         char tname[16];
         snprintf(tname, sizeof(tname), "Matx_%d", i);
         xTaskCreatePinnedToCore(matrix_worker, tname, 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
 
+    // 7. Webinterface starten
     start_rest_server((void *)&GLOBAL_STATE);
+    
+    ESP_LOGI(TAG, "System stabil. Matrix-Mining aktiv.");
 }
