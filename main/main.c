@@ -48,7 +48,7 @@ void matrix_worker(void *pvParameters) {
         if (GLOBAL_STATE.ASIC_initalized && GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
             
             // 1. Der Chip scannt jetzt exklusiv für dieses Matrix-Segment
-            BM1370_set_nonce_range(my_start, my_end);
+            asic_set_nonce_range(my_start, my_end);
             
             // 2. Zeitfenster für diese Einheit (schneller Wechsel für 16+1 Shares)
             vTaskDelay(pdMS_TO_TICKS(100)); 
