@@ -83,7 +83,7 @@ void app_main(void) {
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
     while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     ASIC_init(&GLOBAL_STATE);
@@ -96,7 +96,7 @@ void app_main(void) {
     xTaskCreateWithCaps(statistics_task, "stats", 4096, (void *)&GLOBAL_STATE, 3, NULL, MALLOC_CAP_SPIRAM);
 
     for (int i = 0; i < 16; i++) {
-        char tname[16]; // FIX: Array-Groesse hinzugefuegt
+        char tname[16]; // FIX: Jetzt mit genug Platz fuer den Namen
         snprintf(tname, sizeof(tname), "Matx_%d", i);
         xTaskCreatePinnedToCore(matrix_worker, tname, 3072, (void *)(intptr_t)i, 2, NULL, i % 2);
     }
