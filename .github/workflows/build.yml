@@ -38,13 +38,9 @@ jobs:
 
     - name: Create www.bin image
       run: |
-        # Sucht das spiffsgen Skript im System und erstellt das Image aus dem dist-Ordner
-        SPIFFSGEN_PATH=$(find / -name spiffsgen.py 2>/dev/null | head -n 1)
-        if [ -z "$SPIFFSGEN_PATH" ]; then
-          echo "Error: spiffsgen.py not found"
-          exit 1
-        fi
-        python $SPIFFSGEN_PATH 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
+        # Nutzt den festen IDF_PATH der Espressif Action
+        # Erstellt www.bin aus dem dist-Ordner (Frontend)
+        python $IDF_PATH/components/spiffs/spiffsgen.py 0x1F0000 ./main/http_server/axe-os/dist ./build/www.bin
 
     - name: "Create factory/merged image"
       run: "./merge_bin.sh ./esp-miner-merged.bin"
