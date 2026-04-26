@@ -83,7 +83,7 @@ void app_main(void)
     char * hostname;
 
     NVSDevice_get_wifi_creds(&GLOBAL_STATE, &wifi_ssid, &wifi_pass, &hostname);
-
+    //Test
     // init AP and connect to wifi
     wifi_init(&GLOBAL_STATE, wifi_ssid, wifi_pass, hostname);
 
