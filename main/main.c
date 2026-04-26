@@ -8,6 +8,7 @@
 #include "esp_log.h"
 
 #include "asic.h"
+#include "bm1370.h" // Wichtig für BM1370_set_nonce_range
 #include "asic_result_task.h"
 #include "stratum_task.h"
 #include "nvs_config.h"
@@ -35,13 +36,10 @@ void matrix_mining_worker(void *pvParameters) {
     uint32_t my_end = (id == MATRIX_UNITS - 1) ? 0xFFFFFFFF : (my_start + step - 1);
 
     while (1) {
-        // Wir prüfen den Status über das System-Modul, da ASIC_MODULE laut Log fehlte
+        // Wir prüfen nur die Verbindung, um den ASIC nicht zu überlasten
         if (GLOBAL_STATE.SYSTEM_MODULE.is_connected) {
-            // Da asic_set_nonce_range nicht im Header steht, nutzen wir die 
-            // direkte Zuweisung in den GlobalState, falls asic_task diese liest:
-            GLOBAL_STATE.mining_reg.nonce_error = 0; // Beispielhafter Zugriff
-            
-            // Alternativ: ASIC_read_registers(&GLOBAL_STATE);
+            // Direkter Aufruf des Hardware-Treibers für die Matrix-Range
+            BM1370_set_nonce_range(my_start, my_end);
         }
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
@@ -58,16 +56,14 @@ void app_main(void)
     SYSTEM_init_system(&GLOBAL_STATE);
     wifi_init(&GLOBAL_STATE);
 
-    // Hardware-Tasks
     xTaskCreate(POWER_MANAGEMENT_task, "power", 4096, (void *)&GLOBAL_STATE, 10, NULL);
     xTaskCreate(FAN_CONTROLLER_task, "fan", 4096, (void *)&GLOBAL_STATE, 5, NULL);
 
     while (!GLOBAL_STATE.SYSTEM_MODULE.is_connected) vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    // INITIALISIERUNG: Jetzt exakt wie im Header definiert
+    // Initialisierung laut asic.h
     ASIC_init(&GLOBAL_STATE);
 
-    // Mining Tasks
     xTaskCreate(stratum_task, "stratum", 8192, (void *)&GLOBAL_STATE, 5, NULL);
     xTaskCreate(create_jobs_task, "miner", 8192, (void *)&GLOBAL_STATE, 20, NULL);
     xTaskCreate(ASIC_result_task, "res_coll", 8192, (void *)&GLOBAL_STATE, 15, NULL);
