@@ -30,7 +30,10 @@ idf_component_register(
         "esp_netif" "esp_event" "esp_psram" "esp_lcd"
     PRIV_REQUIRES
         "driver" "esp_adc" "esp_driver_i2c" "json" "spiffs"
+    EMBED_FILES 
+        "./http_server/recovery_page.html"
 )
 
-# Das hier erzwingt den Bau der Miner-Binary!
+# Das hier zwingt den Compiler, die .bin zu erstellen, auch wenn es Warnungen gibt
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=all" APPEND)
+
